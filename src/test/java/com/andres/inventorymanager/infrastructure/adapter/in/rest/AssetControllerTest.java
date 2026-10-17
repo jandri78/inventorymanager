@@ -3,6 +3,7 @@ package com.andres.inventorymanager.infrastructure.adapter.in.rest;
 import com.andres.inventorymanager.application.port.in.AssetDetail;
 import com.andres.inventorymanager.application.port.in.CreateAssetUseCase;
 import com.andres.inventorymanager.application.port.in.GetAssetUseCase;
+import com.andres.inventorymanager.application.port.in.ListAssetsUseCase;
 import com.andres.inventorymanager.domain.exception.AssetNotFoundException;
 import com.andres.inventorymanager.domain.exception.DuplicateSerialException;
 import com.andres.inventorymanager.domain.model.Asset;
@@ -19,9 +20,12 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
+import static org.hamcrest.Matchers.hasSize;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -41,6 +45,9 @@ class AssetControllerTest {
     @MockitoBean
     private GetAssetUseCase getAssetUseCase;
 
+    @MockitoBean
+    private ListAssetsUseCase listAssetsUseCase;
+
     private static final String VALID_BODY = """
             {
               "serial": "SN-001",
@@ -50,6 +57,9 @@ class AssetControllerTest {
               "purchaseValue": 1500000.00
             }
             """;
+
+    private static final DepreciationResult DEPRECIATION = new DepreciationResult(
+            3, new BigDecimal("40000.00"), new BigDecimal("120000.00"), new BigDecimal("880000.00"));
 
     private Asset sampleAsset(UUID id) {
         return Asset.restore(
@@ -104,9 +114,7 @@ class AssetControllerTest {
     void getById_returns200WithDepreciation_whenAssetExists() throws Exception {
         UUID id = UUID.randomUUID();
         Asset asset = sampleAsset(id);
-        DepreciationResult depreciation = new DepreciationResult(
-                3, new BigDecimal("40000.00"), new BigDecimal("120000.00"), new BigDecimal("880000.00"));
-        when(getAssetUseCase.getAsset(id)).thenReturn(new AssetDetail(asset, depreciation));
+        when(getAssetUseCase.getAsset(id)).thenReturn(new AssetDetail(asset, DEPRECIATION));
 
         mockMvc.perform(get("/api/v1/assets/{id}", id))
                 .andExpect(status().isOk())
@@ -125,5 +133,28 @@ class AssetControllerTest {
 
         mockMvc.perform(get("/api/v1/assets/{id}", id))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void list_returns200WithAssets_whenNoStatusFilter() throws Exception {
+        Asset asset = sampleAsset(UUID.randomUUID());
+        when(listAssetsUseCase.listAssets(null)).thenReturn(List.of(new AssetDetail(asset, DEPRECIATION)));
+
+        mockMvc.perform(get("/api/v1/assets"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].serial").value("SN-001"))
+                .andExpect(jsonPath("$[0].depreciation.currentValue").value(880000.00));
+    }
+
+    @Test
+    void list_passesStatusFilterToUseCase() throws Exception {
+        when(listAssetsUseCase.listAssets(AssetStatus.RETIRED)).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/v1/assets").param("status", "RETIRED"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(0)));
+
+        verify(listAssetsUseCase).listAssets(AssetStatus.RETIRED);
     }
 }

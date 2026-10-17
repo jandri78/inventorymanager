@@ -20,6 +20,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -52,6 +53,15 @@ class AssetServiceTest {
             "Laptop de pruebas",
             LocalDate.of(2024, 1, 15),
             new BigDecimal("1500000.00"));
+
+    private static final DepreciationResult DEPRECIATION = new DepreciationResult(
+            3, new BigDecimal("40000.00"), new BigDecimal("120000.00"), new BigDecimal("880000.00"));
+
+    private Asset sampleAsset(UUID id, String serial, AssetStatus status) {
+        return Asset.restore(id, serial, "Laptop", "Laptop de pruebas",
+                LocalDate.of(2021, 1, 15), new BigDecimal("1000000.00"),
+                status, LocalDateTime.now(), LocalDateTime.now());
+    }
 
     @Test
     void createAsset_savesAndReturnsAsset_whenSerialIsUnique() {
@@ -86,20 +96,16 @@ class AssetServiceTest {
     @Test
     void getAsset_returnsAssetWithDepreciation_whenAssetExists() {
         UUID id = UUID.randomUUID();
-        Asset asset = Asset.restore(id, "SN-001", "Laptop", "Laptop de pruebas",
-                LocalDate.of(2021, 1, 15), new BigDecimal("1000000.00"),
-                AssetStatus.ACTIVE, LocalDateTime.now(), LocalDateTime.now());
-        DepreciationResult depreciation = new DepreciationResult(
-                3, new BigDecimal("40000.00"), new BigDecimal("120000.00"), new BigDecimal("880000.00"));
+        Asset asset = sampleAsset(id, "SN-001", AssetStatus.ACTIVE);
 
         when(assetRepositoryPort.findById(id)).thenReturn(Optional.of(asset));
         when(depreciationRateProvider.getAnnualRate()).thenReturn(new BigDecimal("0.04"));
-        when(depreciationCalculator.calculate(any(), any(), any(), any())).thenReturn(depreciation);
+        when(depreciationCalculator.calculate(any(), any(), any(), any())).thenReturn(DEPRECIATION);
 
         AssetDetail result = assetService.getAsset(id);
 
         assertThat(result.asset()).isEqualTo(asset);
-        assertThat(result.depreciation()).isEqualTo(depreciation);
+        assertThat(result.depreciation()).isEqualTo(DEPRECIATION);
     }
 
     @Test
@@ -111,6 +117,49 @@ class AssetServiceTest {
                 .isInstanceOf(AssetNotFoundException.class)
                 .hasMessageContaining(id.toString());
 
+        verifyNoInteractions(depreciationCalculator, depreciationRateProvider);
+    }
+
+    @Test
+    void listAssets_returnsAllWithDepreciation_whenStatusIsNull() {
+        Asset first = sampleAsset(UUID.randomUUID(), "SN-001", AssetStatus.ACTIVE);
+        Asset second = sampleAsset(UUID.randomUUID(), "SN-002", AssetStatus.RETIRED);
+
+        when(assetRepositoryPort.findAll()).thenReturn(List.of(first, second));
+        when(depreciationRateProvider.getAnnualRate()).thenReturn(new BigDecimal("0.04"));
+        when(depreciationCalculator.calculate(any(), any(), any(), any())).thenReturn(DEPRECIATION);
+
+        List<AssetDetail> result = assetService.listAssets(null);
+
+        assertThat(result).hasSize(2);
+        assertThat(result).allSatisfy(detail -> assertThat(detail.depreciation()).isEqualTo(DEPRECIATION));
+        verify(assetRepositoryPort).findAll();
+        verify(assetRepositoryPort, never()).findByStatus(any());
+    }
+
+    @Test
+    void listAssets_filtersByStatus_whenStatusProvided() {
+        Asset active = sampleAsset(UUID.randomUUID(), "SN-001", AssetStatus.ACTIVE);
+
+        when(assetRepositoryPort.findByStatus(AssetStatus.ACTIVE)).thenReturn(List.of(active));
+        when(depreciationRateProvider.getAnnualRate()).thenReturn(new BigDecimal("0.04"));
+        when(depreciationCalculator.calculate(any(), any(), any(), any())).thenReturn(DEPRECIATION);
+
+        List<AssetDetail> result = assetService.listAssets(AssetStatus.ACTIVE);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).asset().getSerial()).isEqualTo("SN-001");
+        verify(assetRepositoryPort).findByStatus(AssetStatus.ACTIVE);
+        verify(assetRepositoryPort, never()).findAll();
+    }
+
+    @Test
+    void listAssets_returnsEmptyList_whenNoAssets() {
+        when(assetRepositoryPort.findAll()).thenReturn(List.of());
+
+        List<AssetDetail> result = assetService.listAssets(null);
+
+        assertThat(result).isEmpty();
         verifyNoInteractions(depreciationCalculator, depreciationRateProvider);
     }
 }

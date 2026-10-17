@@ -9,6 +9,8 @@ import com.andres.inventorymanager.infrastructure.adapter.in.rest.dto.AssetRespo
 import com.andres.inventorymanager.infrastructure.adapter.in.rest.dto.DepreciationResponse;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
+
 @Component
 public class AssetRestMapper {
 
@@ -54,5 +56,11 @@ public class AssetRestMapper {
                         depreciation.annualDepreciation(),
                         depreciation.accumulatedDepreciation(),
                         depreciation.currentValue()));
+    }
+
+    public List<AssetResponse> toResponseList(List<AssetDetail> details) {
+        return details.stream()
+                .map(this::toResponse)
+                .toList();
     }
 }

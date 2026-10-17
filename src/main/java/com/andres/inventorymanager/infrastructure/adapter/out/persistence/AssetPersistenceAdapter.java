@@ -2,8 +2,10 @@ package com.andres.inventorymanager.infrastructure.adapter.out.persistence;
 
 import com.andres.inventorymanager.application.port.out.AssetRepositoryPort;
 import com.andres.inventorymanager.domain.model.Asset;
+import com.andres.inventorymanager.domain.model.AssetStatus;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -25,6 +27,20 @@ public class AssetPersistenceAdapter implements AssetRepositoryPort {
     @Override
     public Optional<Asset> findById(UUID id) {
         return repository.findById(id).map(AssetPersistenceMapper::toDomain);
+    }
+
+    @Override
+    public List<Asset> findAll() {
+        return repository.findAll().stream()
+                .map(AssetPersistenceMapper::toDomain)
+                .toList();
+    }
+
+    @Override
+    public List<Asset> findByStatus(AssetStatus status) {
+        return repository.findByStatus(status).stream()
+                .map(AssetPersistenceMapper::toDomain)
+                .toList();
     }
 
     @Override

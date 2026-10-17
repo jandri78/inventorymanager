@@ -4,22 +4,26 @@ import com.andres.inventorymanager.application.port.in.AssetDetail;
 import com.andres.inventorymanager.application.port.in.CreateAssetCommand;
 import com.andres.inventorymanager.application.port.in.CreateAssetUseCase;
 import com.andres.inventorymanager.application.port.in.GetAssetUseCase;
+import com.andres.inventorymanager.application.port.in.ListAssetsUseCase;
 import com.andres.inventorymanager.application.port.out.AssetRepositoryPort;
 import com.andres.inventorymanager.application.port.out.DepreciationRateProvider;
 import com.andres.inventorymanager.domain.exception.AssetNotFoundException;
 import com.andres.inventorymanager.domain.exception.DuplicateSerialException;
 import com.andres.inventorymanager.domain.model.Asset;
+import com.andres.inventorymanager.domain.model.AssetStatus;
 import com.andres.inventorymanager.domain.model.DepreciationResult;
 import com.andres.inventorymanager.domain.service.DepreciationCalculator;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
 @Service
 @Transactional
-public class AssetService implements CreateAssetUseCase, GetAssetUseCase {
+public class AssetService implements CreateAssetUseCase, GetAssetUseCase, ListAssetsUseCase {
 
     private final AssetRepositoryPort assetRepositoryPort;
     private final DepreciationCalculator depreciationCalculator;
@@ -52,13 +56,27 @@ public class AssetService implements CreateAssetUseCase, GetAssetUseCase {
     public AssetDetail getAsset(UUID id) {
         Asset asset = assetRepositoryPort.findById(id)
                 .orElseThrow(() -> new AssetNotFoundException(id));
+        return new AssetDetail(asset, calculateDepreciation(asset));
+    }
 
-        DepreciationResult depreciation = depreciationCalculator.calculate(
+    @Override
+    @Transactional(readOnly = true)
+    public List<AssetDetail> listAssets(AssetStatus status) {
+        List<Asset> assets = (status == null)
+                ? assetRepositoryPort.findAll()
+                : assetRepositoryPort.findByStatus(status);
+
+        return assets.stream()
+                .map(asset -> new AssetDetail(asset, calculateDepreciation(asset)))
+                .toList();
+    }
+
+    private DepreciationResult calculateDepreciation(Asset asset) {
+        BigDecimal annualRate = depreciationRateProvider.getAnnualRate();
+        return depreciationCalculator.calculate(
                 asset.getPurchaseValue(),
                 asset.getPurchaseDate(),
-                depreciationRateProvider.getAnnualRate(),
+                annualRate,
                 LocalDate.now());
-
-        return new AssetDetail(asset, depreciation);
     }
 }
