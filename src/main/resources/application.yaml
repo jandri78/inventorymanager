@@ -17,3 +17,7 @@ spring:
     hibernate:
       ddl-auto: update
     show-sql: true
+
+app:
+  depreciation:
+    rate: 0.04
