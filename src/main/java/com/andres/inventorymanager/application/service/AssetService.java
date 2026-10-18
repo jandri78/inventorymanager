@@ -5,6 +5,8 @@ import com.andres.inventorymanager.application.port.in.CreateAssetCommand;
 import com.andres.inventorymanager.application.port.in.CreateAssetUseCase;
 import com.andres.inventorymanager.application.port.in.GetAssetUseCase;
 import com.andres.inventorymanager.application.port.in.ListAssetsUseCase;
+import com.andres.inventorymanager.application.port.in.UpdateAssetCommand;
+import com.andres.inventorymanager.application.port.in.UpdateAssetUseCase;
 import com.andres.inventorymanager.application.port.out.AssetRepositoryPort;
 import com.andres.inventorymanager.application.port.out.DepreciationRateProvider;
 import com.andres.inventorymanager.domain.exception.AssetNotFoundException;
@@ -23,7 +25,7 @@ import java.util.UUID;
 
 @Service
 @Transactional
-public class AssetService implements CreateAssetUseCase, GetAssetUseCase, ListAssetsUseCase {
+public class AssetService implements CreateAssetUseCase, GetAssetUseCase, ListAssetsUseCase, UpdateAssetUseCase {
 
     private final AssetRepositoryPort assetRepositoryPort;
     private final DepreciationCalculator depreciationCalculator;
@@ -54,8 +56,7 @@ public class AssetService implements CreateAssetUseCase, GetAssetUseCase, ListAs
     @Override
     @Transactional(readOnly = true)
     public AssetDetail getAsset(UUID id) {
-        Asset asset = assetRepositoryPort.findById(id)
-                .orElseThrow(() -> new AssetNotFoundException(id));
+        Asset asset = findAssetOrThrow(id);
         return new AssetDetail(asset, calculateDepreciation(asset));
     }
 
@@ -69,6 +70,31 @@ public class AssetService implements CreateAssetUseCase, GetAssetUseCase, ListAs
         return assets.stream()
                 .map(asset -> new AssetDetail(asset, calculateDepreciation(asset)))
                 .toList();
+    }
+
+    @Override
+    public AssetDetail updateAsset(UUID id, UpdateAssetCommand command) {
+        Asset asset = findAssetOrThrow(id);
+
+        boolean serialChanged = !asset.getSerial().equals(command.serial());
+        if (serialChanged && assetRepositoryPort.existsBySerial(command.serial())) {
+            throw new DuplicateSerialException(command.serial());
+        }
+
+        asset.updateDetails(
+                command.serial(),
+                command.name(),
+                command.description(),
+                command.purchaseDate(),
+                command.purchaseValue());
+
+        Asset updated = assetRepositoryPort.save(asset);
+        return new AssetDetail(updated, calculateDepreciation(updated));
+    }
+
+    private Asset findAssetOrThrow(UUID id) {
+        return assetRepositoryPort.findById(id)
+                .orElseThrow(() -> new AssetNotFoundException(id));
     }
 
     private DepreciationResult calculateDepreciation(Asset asset) {

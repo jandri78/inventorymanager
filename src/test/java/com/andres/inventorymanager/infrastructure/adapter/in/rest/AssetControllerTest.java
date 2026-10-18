@@ -4,6 +4,7 @@ import com.andres.inventorymanager.application.port.in.AssetDetail;
 import com.andres.inventorymanager.application.port.in.CreateAssetUseCase;
 import com.andres.inventorymanager.application.port.in.GetAssetUseCase;
 import com.andres.inventorymanager.application.port.in.ListAssetsUseCase;
+import com.andres.inventorymanager.application.port.in.UpdateAssetUseCase;
 import com.andres.inventorymanager.domain.exception.AssetNotFoundException;
 import com.andres.inventorymanager.domain.exception.DuplicateSerialException;
 import com.andres.inventorymanager.domain.model.Asset;
@@ -25,10 +26,12 @@ import java.util.UUID;
 
 import static org.hamcrest.Matchers.hasSize;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -47,6 +50,9 @@ class AssetControllerTest {
 
     @MockitoBean
     private ListAssetsUseCase listAssetsUseCase;
+
+    @MockitoBean
+    private UpdateAssetUseCase updateAssetUseCase;
 
     private static final String VALID_BODY = """
             {
@@ -156,5 +162,64 @@ class AssetControllerTest {
                 .andExpect(jsonPath("$", hasSize(0)));
 
         verify(listAssetsUseCase).listAssets(AssetStatus.RETIRED);
+    }
+
+    @Test
+    void update_returns200WithUpdatedAsset_whenRequestIsValid() throws Exception {
+        UUID id = UUID.randomUUID();
+        Asset asset = Asset.restore(
+                id, "SN-001", "Servidor", "nueva descripcion",
+                LocalDate.of(2020, 5, 10), new BigDecimal("2000000.00"),
+                AssetStatus.ACTIVE, LocalDateTime.now(), LocalDateTime.now());
+        when(updateAssetUseCase.updateAsset(eq(id), any())).thenReturn(new AssetDetail(asset, DEPRECIATION));
+
+        mockMvc.perform(put("/api/v1/assets/{id}", id)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(VALID_BODY))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(id.toString()))
+                .andExpect(jsonPath("$.name").value("Servidor"))
+                .andExpect(jsonPath("$.purchaseValue").value(2000000.00));
+    }
+
+    @Test
+    void update_returns400_whenRequestIsInvalid() throws Exception {
+        UUID id = UUID.randomUUID();
+        String invalidBody = """
+                {
+                  "serial": "",
+                  "name": "",
+                  "purchaseDate": "2999-01-01",
+                  "purchaseValue": -1
+                }
+                """;
+
+        mockMvc.perform(put("/api/v1/assets/{id}", id)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(invalidBody))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void update_returns404_whenAssetDoesNotExist() throws Exception {
+        UUID id = UUID.randomUUID();
+        when(updateAssetUseCase.updateAsset(eq(id), any())).thenThrow(new AssetNotFoundException(id));
+
+        mockMvc.perform(put("/api/v1/assets/{id}", id)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(VALID_BODY))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void update_returns409_whenSerialAlreadyExists() throws Exception {
+        UUID id = UUID.randomUUID();
+        when(updateAssetUseCase.updateAsset(eq(id), any()))
+                .thenThrow(new DuplicateSerialException("SN-001"));
+
+        mockMvc.perform(put("/api/v1/assets/{id}", id)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(VALID_BODY))
+                .andExpect(status().isConflict());
     }
 }

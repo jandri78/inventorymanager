@@ -2,6 +2,7 @@ package com.andres.inventorymanager.infrastructure.adapter.in.rest;
 
 import com.andres.inventorymanager.application.port.in.AssetDetail;
 import com.andres.inventorymanager.application.port.in.CreateAssetCommand;
+import com.andres.inventorymanager.application.port.in.UpdateAssetCommand;
 import com.andres.inventorymanager.domain.model.Asset;
 import com.andres.inventorymanager.domain.model.DepreciationResult;
 import com.andres.inventorymanager.infrastructure.adapter.in.rest.dto.AssetRequest;
@@ -16,6 +17,15 @@ public class AssetRestMapper {
 
     public CreateAssetCommand toCommand(AssetRequest request) {
         return new CreateAssetCommand(
+                request.serial(),
+                request.name(),
+                request.description(),
+                request.purchaseDate(),
+                request.purchaseValue());
+    }
+
+    public UpdateAssetCommand toUpdateCommand(AssetRequest request) {
+        return new UpdateAssetCommand(
                 request.serial(),
                 request.name(),
                 request.description(),

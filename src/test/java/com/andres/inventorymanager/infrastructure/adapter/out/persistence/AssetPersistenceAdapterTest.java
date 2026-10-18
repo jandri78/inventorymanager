@@ -74,4 +74,19 @@ class AssetPersistenceAdapterTest {
         assertThat(adapter.existsBySerial("SN-001")).isTrue();
         assertThat(adapter.existsBySerial("SN-999")).isFalse();
     }
+
+    @Test
+    void save_persistsUpdatedDetails_whenAssetAlreadyExists() {
+        Asset saved = adapter.save(newAsset("SN-001", AssetStatus.ACTIVE));
+        saved.updateDetails("SN-001", "Servidor", "actualizado",
+                LocalDate.of(2020, 5, 10), new BigDecimal("2000000.00"));
+
+        adapter.save(saved);
+
+        Asset found = adapter.findById(saved.getId()).orElseThrow();
+        assertThat(found.getName()).isEqualTo("Servidor");
+        assertThat(found.getDescription()).isEqualTo("actualizado");
+        assertThat(found.getPurchaseValue()).isEqualByComparingTo("2000000.00");
+        assertThat(found.getPurchaseDate()).isEqualTo(LocalDate.of(2020, 5, 10));
+    }
 }

@@ -2,6 +2,7 @@ package com.andres.inventorymanager.application.service;
 
 import com.andres.inventorymanager.application.port.in.AssetDetail;
 import com.andres.inventorymanager.application.port.in.CreateAssetCommand;
+import com.andres.inventorymanager.application.port.in.UpdateAssetCommand;
 import com.andres.inventorymanager.application.port.out.AssetRepositoryPort;
 import com.andres.inventorymanager.application.port.out.DepreciationRateProvider;
 import com.andres.inventorymanager.domain.exception.AssetNotFoundException;
@@ -160,6 +161,77 @@ class AssetServiceTest {
         List<AssetDetail> result = assetService.listAssets(null);
 
         assertThat(result).isEmpty();
+        verifyNoInteractions(depreciationCalculator, depreciationRateProvider);
+    }
+
+    @Test
+    void updateAsset_updatesDetails_whenSerialUnchanged() {
+        UUID id = UUID.randomUUID();
+        Asset existing = sampleAsset(id, "SN-001", AssetStatus.ACTIVE);
+        UpdateAssetCommand command = new UpdateAssetCommand(
+                "SN-001", "Servidor", "nueva descripcion", LocalDate.of(2020, 5, 10), new BigDecimal("2000000.00"));
+
+        when(assetRepositoryPort.findById(id)).thenReturn(Optional.of(existing));
+        when(assetRepositoryPort.save(any(Asset.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(depreciationRateProvider.getAnnualRate()).thenReturn(new BigDecimal("0.04"));
+        when(depreciationCalculator.calculate(any(), any(), any(), any())).thenReturn(DEPRECIATION);
+
+        AssetDetail result = assetService.updateAsset(id, command);
+
+        assertThat(result.asset().getName()).isEqualTo("Servidor");
+        assertThat(result.asset().getDescription()).isEqualTo("nueva descripcion");
+        assertThat(result.asset().getPurchaseValue()).isEqualByComparingTo("2000000.00");
+        verify(assetRepositoryPort, never()).existsBySerial(any());
+        verify(assetRepositoryPort).save(existing);
+    }
+
+    @Test
+    void updateAsset_changesSerial_whenNewSerialIsUnique() {
+        UUID id = UUID.randomUUID();
+        Asset existing = sampleAsset(id, "SN-001", AssetStatus.ACTIVE);
+        UpdateAssetCommand command = new UpdateAssetCommand(
+                "SN-002", "Laptop", "Laptop de pruebas", LocalDate.of(2021, 1, 15), new BigDecimal("1000000.00"));
+
+        when(assetRepositoryPort.findById(id)).thenReturn(Optional.of(existing));
+        when(assetRepositoryPort.existsBySerial("SN-002")).thenReturn(false);
+        when(assetRepositoryPort.save(any(Asset.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(depreciationRateProvider.getAnnualRate()).thenReturn(new BigDecimal("0.04"));
+        when(depreciationCalculator.calculate(any(), any(), any(), any())).thenReturn(DEPRECIATION);
+
+        AssetDetail result = assetService.updateAsset(id, command);
+
+        assertThat(result.asset().getSerial()).isEqualTo("SN-002");
+        verify(assetRepositoryPort).existsBySerial("SN-002");
+    }
+
+    @Test
+    void updateAsset_throwsDuplicateSerial_whenNewSerialAlreadyExists() {
+        UUID id = UUID.randomUUID();
+        Asset existing = sampleAsset(id, "SN-001", AssetStatus.ACTIVE);
+        UpdateAssetCommand command = new UpdateAssetCommand(
+                "SN-999", "Laptop", "Laptop de pruebas", LocalDate.of(2021, 1, 15), new BigDecimal("1000000.00"));
+
+        when(assetRepositoryPort.findById(id)).thenReturn(Optional.of(existing));
+        when(assetRepositoryPort.existsBySerial("SN-999")).thenReturn(true);
+
+        assertThatThrownBy(() -> assetService.updateAsset(id, command))
+                .isInstanceOf(DuplicateSerialException.class)
+                .hasMessageContaining("SN-999");
+
+        verify(assetRepositoryPort, never()).save(any(Asset.class));
+    }
+
+    @Test
+    void updateAsset_throwsAssetNotFound_whenAssetDoesNotExist() {
+        UUID id = UUID.randomUUID();
+        UpdateAssetCommand command = new UpdateAssetCommand(
+                "SN-001", "Laptop", "Laptop de pruebas", LocalDate.of(2021, 1, 15), new BigDecimal("1000000.00"));
+
+        when(assetRepositoryPort.findById(id)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> assetService.updateAsset(id, command))
+                .isInstanceOf(AssetNotFoundException.class);
+
         verifyNoInteractions(depreciationCalculator, depreciationRateProvider);
     }
 }
