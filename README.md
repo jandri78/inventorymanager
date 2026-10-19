@@ -82,17 +82,6 @@ Invoke-RestMethod -Method Post -Uri http://localhost:8080/api/v1/assets `
 ./mvnw spring-boot:run
 ```
 
-La aplicación queda disponible en:
-
-| Recurso | URL |
-| --- | --- |
-| API | `http://localhost:8080/api/v1/assets` |
-| Swagger UI | `http://localhost:8080/swagger-ui.html` |
-| Health | `http://localhost:8080/actuator/health` |
-| Consola H2 | `http://localhost:8080/h2-console` |
-
-Consola H2: JDBC URL `jdbc:h2:mem:testdb`, usuario `sa`, contraseña vacía.
-
 ### Opción B: Docker (Dockerfile)
 
 Construir la imagen:
@@ -120,6 +109,16 @@ Para detenerlo:
 ```bash
 docker compose down
 ```
+### La aplicación queda disponible en:
+
+| Recurso | URL |
+| --- | --- |
+| API | `http://localhost:8080/api/v1/assets` |
+| Swagger UI | `http://localhost:8080/swagger-ui.html` |
+| Health | `http://localhost:8080/actuator/health` |
+| Consola H2 | `http://localhost:8080/h2-console` |
+
+Consola H2: JDBC URL `jdbc:h2:mem:testdb`, usuario `sa`, contraseña vacía.
 
 ### Nota sobre H2
 

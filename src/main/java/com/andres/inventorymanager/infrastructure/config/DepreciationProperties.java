@@ -25,10 +25,6 @@ public class DepreciationProperties implements DepreciationRateProvider {
         return rate;
     }
 
-    public BigDecimal getRate() {
-        return rate;
-    }
-
     public void setRate(BigDecimal rate) {
         this.rate = rate;
     }
