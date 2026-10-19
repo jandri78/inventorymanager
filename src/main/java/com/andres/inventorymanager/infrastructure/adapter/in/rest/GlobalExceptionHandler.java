@@ -1,5 +1,6 @@
 package com.andres.inventorymanager.infrastructure.adapter.in.rest;
 
+import com.andres.inventorymanager.domain.exception.AssetAlreadyRetiredException;
 import com.andres.inventorymanager.domain.exception.AssetNotFoundException;
 import com.andres.inventorymanager.domain.exception.DuplicateSerialException;
 import org.springframework.http.HttpStatus;
@@ -22,6 +23,13 @@ public class GlobalExceptionHandler {
     public ProblemDetail handleDuplicateSerial(DuplicateSerialException ex) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
         problem.setTitle("Duplicate serial");
+        return problem;
+    }
+
+    @ExceptionHandler(AssetAlreadyRetiredException.class)
+    public ProblemDetail handleAlreadyRetired(AssetAlreadyRetiredException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problem.setTitle("Asset already retired");
         return problem;
     }
 

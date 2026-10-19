@@ -4,7 +4,9 @@ import com.andres.inventorymanager.application.port.in.AssetDetail;
 import com.andres.inventorymanager.application.port.in.CreateAssetUseCase;
 import com.andres.inventorymanager.application.port.in.GetAssetUseCase;
 import com.andres.inventorymanager.application.port.in.ListAssetsUseCase;
+import com.andres.inventorymanager.application.port.in.RetireAssetUseCase;
 import com.andres.inventorymanager.application.port.in.UpdateAssetUseCase;
+import com.andres.inventorymanager.domain.exception.AssetAlreadyRetiredException;
 import com.andres.inventorymanager.domain.exception.AssetNotFoundException;
 import com.andres.inventorymanager.domain.exception.DuplicateSerialException;
 import com.andres.inventorymanager.domain.model.Asset;
@@ -30,6 +32,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -53,6 +56,9 @@ class AssetControllerTest {
 
     @MockitoBean
     private UpdateAssetUseCase updateAssetUseCase;
+
+    @MockitoBean
+    private RetireAssetUseCase retireAssetUseCase;
 
     private static final String VALID_BODY = """
             {
@@ -220,6 +226,40 @@ class AssetControllerTest {
         mockMvc.perform(put("/api/v1/assets/{id}", id)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(VALID_BODY))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    void retire_returns200WithRetiredStatus() throws Exception {
+        UUID id = UUID.randomUUID();
+        Asset retired = Asset.restore(
+                id, "SN-001", "Laptop", "Laptop de pruebas",
+                LocalDate.of(2021, 1, 15), new BigDecimal("1000000.00"),
+                AssetStatus.RETIRED, LocalDateTime.now(), LocalDateTime.now());
+        when(retireAssetUseCase.retireAsset(id)).thenReturn(new AssetDetail(retired, DEPRECIATION));
+
+        mockMvc.perform(patch("/api/v1/assets/{id}/retire", id))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(id.toString()))
+                .andExpect(jsonPath("$.status").value("RETIRED"))
+                .andExpect(jsonPath("$.depreciation.currentValue").value(880000.00));
+    }
+
+    @Test
+    void retire_returns404_whenAssetDoesNotExist() throws Exception {
+        UUID id = UUID.randomUUID();
+        when(retireAssetUseCase.retireAsset(id)).thenThrow(new AssetNotFoundException(id));
+
+        mockMvc.perform(patch("/api/v1/assets/{id}/retire", id))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void retire_returns409_whenAssetAlreadyRetired() throws Exception {
+        UUID id = UUID.randomUUID();
+        when(retireAssetUseCase.retireAsset(id)).thenThrow(new AssetAlreadyRetiredException(id));
+
+        mockMvc.perform(patch("/api/v1/assets/{id}/retire", id))
                 .andExpect(status().isConflict());
     }
 }

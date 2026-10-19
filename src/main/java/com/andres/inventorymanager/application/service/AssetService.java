@@ -5,10 +5,12 @@ import com.andres.inventorymanager.application.port.in.CreateAssetCommand;
 import com.andres.inventorymanager.application.port.in.CreateAssetUseCase;
 import com.andres.inventorymanager.application.port.in.GetAssetUseCase;
 import com.andres.inventorymanager.application.port.in.ListAssetsUseCase;
+import com.andres.inventorymanager.application.port.in.RetireAssetUseCase;
 import com.andres.inventorymanager.application.port.in.UpdateAssetCommand;
 import com.andres.inventorymanager.application.port.in.UpdateAssetUseCase;
 import com.andres.inventorymanager.application.port.out.AssetRepositoryPort;
 import com.andres.inventorymanager.application.port.out.DepreciationRateProvider;
+import com.andres.inventorymanager.domain.exception.AssetAlreadyRetiredException;
 import com.andres.inventorymanager.domain.exception.AssetNotFoundException;
 import com.andres.inventorymanager.domain.exception.DuplicateSerialException;
 import com.andres.inventorymanager.domain.model.Asset;
@@ -25,7 +27,7 @@ import java.util.UUID;
 
 @Service
 @Transactional
-public class AssetService implements CreateAssetUseCase, GetAssetUseCase, ListAssetsUseCase, UpdateAssetUseCase {
+public class AssetService implements CreateAssetUseCase, GetAssetUseCase, ListAssetsUseCase, UpdateAssetUseCase, RetireAssetUseCase {
 
     private final AssetRepositoryPort assetRepositoryPort;
     private final DepreciationCalculator depreciationCalculator;
@@ -76,6 +78,10 @@ public class AssetService implements CreateAssetUseCase, GetAssetUseCase, ListAs
     public AssetDetail updateAsset(UUID id, UpdateAssetCommand command) {
         Asset asset = findAssetOrThrow(id);
 
+        if (asset.isRetired()) {
+            throw new AssetAlreadyRetiredException(id);
+        }
+
         boolean serialChanged = !asset.getSerial().equals(command.serial());
         if (serialChanged && assetRepositoryPort.existsBySerial(command.serial())) {
             throw new DuplicateSerialException(command.serial());
@@ -90,6 +96,20 @@ public class AssetService implements CreateAssetUseCase, GetAssetUseCase, ListAs
 
         Asset updated = assetRepositoryPort.save(asset);
         return new AssetDetail(updated, calculateDepreciation(updated));
+    }
+
+    @Override
+    public AssetDetail retireAsset(UUID id) {
+        Asset asset = findAssetOrThrow(id);
+
+        if (asset.isRetired()) {
+            throw new AssetAlreadyRetiredException(id);
+        }
+
+        asset.retire();
+
+        Asset retired = assetRepositoryPort.save(asset);
+        return new AssetDetail(retired, calculateDepreciation(retired));
     }
 
     private Asset findAssetOrThrow(UUID id) {

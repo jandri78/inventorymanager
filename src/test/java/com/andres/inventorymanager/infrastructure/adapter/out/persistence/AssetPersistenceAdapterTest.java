@@ -89,4 +89,16 @@ class AssetPersistenceAdapterTest {
         assertThat(found.getPurchaseValue()).isEqualByComparingTo("2000000.00");
         assertThat(found.getPurchaseDate()).isEqualTo(LocalDate.of(2020, 5, 10));
     }
+
+    @Test
+    void save_persistsRetiredStatus() {
+        Asset saved = adapter.save(newAsset("SN-001", AssetStatus.ACTIVE));
+        saved.retire();
+
+        adapter.save(saved);
+
+        Asset found = adapter.findById(saved.getId()).orElseThrow();
+        assertThat(found.getStatus()).isEqualTo(AssetStatus.RETIRED);
+        assertThat(found.isRetired()).isTrue();
+    }
 }

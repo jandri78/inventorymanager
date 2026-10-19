@@ -5,6 +5,7 @@ import com.andres.inventorymanager.application.port.in.CreateAssetCommand;
 import com.andres.inventorymanager.application.port.in.UpdateAssetCommand;
 import com.andres.inventorymanager.application.port.out.AssetRepositoryPort;
 import com.andres.inventorymanager.application.port.out.DepreciationRateProvider;
+import com.andres.inventorymanager.domain.exception.AssetAlreadyRetiredException;
 import com.andres.inventorymanager.domain.exception.AssetNotFoundException;
 import com.andres.inventorymanager.domain.exception.DuplicateSerialException;
 import com.andres.inventorymanager.domain.model.Asset;
@@ -230,6 +231,62 @@ class AssetServiceTest {
         when(assetRepositoryPort.findById(id)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> assetService.updateAsset(id, command))
+                .isInstanceOf(AssetNotFoundException.class);
+
+        verifyNoInteractions(depreciationCalculator, depreciationRateProvider);
+    }
+
+    @Test
+    void updateAsset_throwsAlreadyRetired_whenAssetIsRetired() {
+        UUID id = UUID.randomUUID();
+        Asset retired = sampleAsset(id, "SN-001", AssetStatus.RETIRED);
+        UpdateAssetCommand command = new UpdateAssetCommand(
+                "SN-001", "Laptop", "Laptop de pruebas", LocalDate.of(2021, 1, 15), new BigDecimal("1000000.00"));
+
+        when(assetRepositoryPort.findById(id)).thenReturn(Optional.of(retired));
+
+        assertThatThrownBy(() -> assetService.updateAsset(id, command))
+                .isInstanceOf(AssetAlreadyRetiredException.class);
+
+        verify(assetRepositoryPort, never()).save(any(Asset.class));
+    }
+
+    @Test
+    void retireAsset_marksAssetAsRetired() {
+        UUID id = UUID.randomUUID();
+        Asset active = sampleAsset(id, "SN-001", AssetStatus.ACTIVE);
+
+        when(assetRepositoryPort.findById(id)).thenReturn(Optional.of(active));
+        when(assetRepositoryPort.save(any(Asset.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(depreciationRateProvider.getAnnualRate()).thenReturn(new BigDecimal("0.04"));
+        when(depreciationCalculator.calculate(any(), any(), any(), any())).thenReturn(DEPRECIATION);
+
+        AssetDetail result = assetService.retireAsset(id);
+
+        assertThat(result.asset().getStatus()).isEqualTo(AssetStatus.RETIRED);
+        verify(assetRepositoryPort).save(active);
+    }
+
+    @Test
+    void retireAsset_throwsAlreadyRetired_whenAssetIsRetired() {
+        UUID id = UUID.randomUUID();
+        Asset retired = sampleAsset(id, "SN-001", AssetStatus.RETIRED);
+
+        when(assetRepositoryPort.findById(id)).thenReturn(Optional.of(retired));
+
+        assertThatThrownBy(() -> assetService.retireAsset(id))
+                .isInstanceOf(AssetAlreadyRetiredException.class);
+
+        verify(assetRepositoryPort, never()).save(any(Asset.class));
+        verifyNoInteractions(depreciationCalculator, depreciationRateProvider);
+    }
+
+    @Test
+    void retireAsset_throwsAssetNotFound_whenAssetDoesNotExist() {
+        UUID id = UUID.randomUUID();
+        when(assetRepositoryPort.findById(id)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> assetService.retireAsset(id))
                 .isInstanceOf(AssetNotFoundException.class);
 
         verifyNoInteractions(depreciationCalculator, depreciationRateProvider);
